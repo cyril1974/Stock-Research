@@ -14,7 +14,7 @@ CACHE="finmind_cache.db"
 
 # 回測區間
 BT_START="2024-01-01"
-BT_END="2024-12-31"
+BT_END=$(date +%Y-%m-%d)
 
 # 配額耗盡時的處理: ask / wait / abort
 ON_QUOTA="wait"
