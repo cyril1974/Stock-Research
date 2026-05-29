@@ -311,16 +311,16 @@ class ScoreEngine:
 # 4. 股票清單載入
 # ============================================================
 def load_stock_list(source: str) -> tuple:
-    """從多種來源載入股票清單，同時解析股票名稱
+    """從多種來源載入股票清單
 
     支援:
     - 逗號分隔字串: "2330,2317,2454"
     - 檔案路徑 (.txt / .csv)
-        .txt: 一行一檔或逗號分隔，支援 # 後的中文名稱 (e.g. 2330  # 台積電)
+        .txt: 一行一檔或逗號分隔，支援 # 註解
         .csv: 第一欄為代號，第二欄（若有）為名稱
 
     Returns:
-        (stocks: list, names: dict)  names 可能為空 {}
+        (stocks: list, names: dict)  names 僅從 CSV 第二欄取得
     """
     p = Path(source)
     if p.exists() and p.is_file():
@@ -339,22 +339,14 @@ def load_stock_list(source: str) -> tuple:
         else:
             text = p.read_text(encoding="utf-8-sig")
             tokens = []
-            names = {}
             for line in text.splitlines():
-                comment = ""
                 if "#" in line:
-                    parts = line.split("#", 1)
-                    comment = parts[1].strip()
-                    line = parts[0]
+                    line = line.split("#", 1)[0]
                 line = line.strip()
                 if not line:
                     continue
-                ids = [t.strip() for t in line.split(",") if t.strip()]
-                tokens.extend(ids)
-                # 單一代號且有註解 → 視為股票名稱
-                if len(ids) == 1 and comment:
-                    names[ids[0]] = comment
-            return tokens, names
+                tokens.extend([t.strip() for t in line.split(",") if t.strip()])
+            return tokens, {}
     else:
         stocks = [s.strip() for s in source.split(",") if s.strip()]
         return stocks, {}
