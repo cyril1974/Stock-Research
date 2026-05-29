@@ -310,42 +310,60 @@ class ScoreEngine:
 # ============================================================
 # 4. 股票清單載入
 # ============================================================
-def load_stock_list(source: str) -> list:
-    """從多種來源載入股票清單
+def load_stock_list(source: str) -> tuple:
+    """從多種來源載入股票清單，同時解析股票名稱
 
     支援:
     - 逗號分隔字串: "2330,2317,2454"
     - 檔案路徑 (.txt / .csv)
-        .txt: 一行一檔或逗號分隔
-        .csv: 取第一欄
+        .txt: 一行一檔或逗號分隔，支援 # 後的中文名稱 (e.g. 2330  # 台積電)
+        .csv: 第一欄為代號，第二欄（若有）為名稱
+
+    Returns:
+        (stocks: list, names: dict)  names 可能為空 {}
     """
     p = Path(source)
     if p.exists() and p.is_file():
         ext = p.suffix.lower()
         if ext == ".csv":
             df = pd.read_csv(p, dtype=str, encoding="utf-8-sig")
-            return [s.strip() for s in df.iloc[:, 0].dropna().tolist() if s.strip()]
+            stocks = [s.strip() for s in df.iloc[:, 0].dropna().tolist() if s.strip()]
+            names = {}
+            if len(df.columns) >= 2:
+                for _, row in df.iterrows():
+                    sid = str(row.iloc[0]).strip()
+                    name = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
+                    if sid and name:
+                        names[sid] = name
+            return stocks, names
         else:
             text = p.read_text(encoding="utf-8-sig")
             tokens = []
+            names = {}
             for line in text.splitlines():
-                # 先移除行內 # 註解 (但要小心 CSV 第一欄為純數字代號)
+                comment = ""
                 if "#" in line:
-                    line = line.split("#", 1)[0]
+                    parts = line.split("#", 1)
+                    comment = parts[1].strip()
+                    line = parts[0]
                 line = line.strip()
                 if not line:
                     continue
-                tokens.extend([t.strip() for t in line.split(",") if t.strip()])
-            return tokens
+                ids = [t.strip() for t in line.split(",") if t.strip()]
+                tokens.extend(ids)
+                # 單一代號且有註解 → 視為股票名稱
+                if len(ids) == 1 and comment:
+                    names[ids[0]] = comment
+            return tokens, names
     else:
-        # 視為逗號分隔字串
-        return [s.strip() for s in source.split(",") if s.strip()]
+        stocks = [s.strip() for s in source.split(",") if s.strip()]
+        return stocks, {}
 
 
 # ============================================================
 # 5. 模式 A: 單次評分排序
 # ============================================================
-def cmd_rank(stocks, end_date, lookback_days, token, output_dir, cache_path, quota_policy):
+def cmd_rank(stocks, end_date, lookback_days, token, output_dir, cache_path, quota_policy, names=None):
     fetcher = FinMindCachedFetcher(
         token=token,
         cache_path=cache_path,
@@ -366,6 +384,13 @@ def cmd_rank(stocks, end_date, lookback_days, token, output_dir, cache_path, quo
     if usage:
         info(f"API 額度: 已用 {usage['used']}/{usage['limit']}")
     print()
+
+    # 建立股票名稱對照表：優先用檔案解析的名稱，不足的從 FinMind 補
+    name_map = dict(names) if names else {}
+    missing_names = [sid for sid in stocks if sid not in name_map]
+    if missing_names:
+        fetched_names = fetcher.get_stock_names(missing_names)
+        name_map.update(fetched_names)
 
     results = []
     iterator = tqdm(stocks, desc="評分中", unit="檔") if HAS_TQDM else stocks
@@ -403,6 +428,7 @@ def cmd_rank(stocks, end_date, lookback_days, token, output_dir, cache_path, quo
 
     df = pd.DataFrame([{
         "stock_id": r["stock_id"],
+        "stock_name": name_map.get(r["stock_id"], ""),
         "總分": r["total_score"],
         "技術分": r["tech_score"],
         "籌碼分": r["chip_score"],
@@ -713,7 +739,7 @@ def main():
 
     # 載入股票清單
     try:
-        stocks = load_stock_list(args.stocks)
+        stocks, names = load_stock_list(args.stocks)
     except Exception as e:
         err(f"無法讀取股票清單: {e}")
         sys.exit(1)
@@ -731,7 +757,7 @@ def main():
     if args.mode == "rank":
         header("模式 A - 單次評分排序")
         cmd_rank(stocks, args.end, args.lookback, args.token, out_dir,
-                 args.cache, args.on_quota)
+                 args.cache, args.on_quota, names)
 
     elif args.mode == "backtest":
         header("模式 B - 月度換股回測")
@@ -741,7 +767,7 @@ def main():
     elif args.mode == "both":
         header("模式 A - 單次評分排序")
         cmd_rank(stocks, args.end, args.lookback, args.token, out_dir,
-                 args.cache, args.on_quota)
+                 args.cache, args.on_quota, names)
         header("模式 B - 月度換股回測")
         cmd_backtest(stocks, args.start, args.end, args.top_n, args.token, out_dir,
                      args.cache, args.on_quota)

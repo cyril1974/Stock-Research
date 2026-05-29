@@ -377,12 +377,69 @@ class FinMindCachedFetcher:
     # ------------------------------------------------------------
     def get_price(self, stock_id, start, end):
         return self._fetch("TaiwanStockPrice", stock_id, start, end)
-    
+
     def get_institutional(self, stock_id, start, end):
         return self._fetch("TaiwanStockInstitutionalInvestorsBuySell", stock_id, start, end)
-    
+
     def get_margin(self, stock_id, start, end):
         return self._fetch("TaiwanStockMarginPurchaseShortSale", stock_id, start, end)
+
+    def get_stock_names(self, stock_ids: list) -> dict:
+        """取得股票中文名稱，結果快取 7 天避免重複請求
+
+        Returns: {stock_id: stock_name}
+        """
+        conn = sqlite3.connect(self.cache_path)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS stock_info (
+                stock_id TEXT PRIMARY KEY,
+                stock_name TEXT,
+                fetched_at TEXT
+            )
+        """)
+        conn.commit()
+
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        placeholders = ",".join("?" * len(stock_ids))
+        rows = c.execute(
+            f"SELECT stock_id, stock_name FROM stock_info WHERE stock_id IN ({placeholders}) AND fetched_at > ?",
+            stock_ids + [cutoff],
+        ).fetchall()
+        conn.close()
+
+        cached = {r[0]: r[1] for r in rows}
+        missing = [sid for sid in stock_ids if sid not in cached]
+
+        if missing:
+            try:
+                params = {"dataset": "TaiwanStockInfo"}
+                if self.token:
+                    params["token"] = self.token
+                resp = requests.get(self.BASE_URL, params=params, timeout=20)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("status") == 200:
+                        info_map = {
+                            str(r.get("stock_id", "")): r.get("company_name", "")
+                            for r in data.get("data", [])
+                        }
+                        conn = sqlite3.connect(self.cache_path)
+                        c = conn.cursor()
+                        now = datetime.now().isoformat()
+                        for sid in missing:
+                            name = info_map.get(sid, "")
+                            c.execute(
+                                "INSERT OR REPLACE INTO stock_info VALUES (?, ?, ?)",
+                                (sid, name, now),
+                            )
+                            cached[sid] = name
+                        conn.commit()
+                        conn.close()
+            except Exception:
+                pass
+
+        return cached
     
     # ------------------------------------------------------------
     # 統計與管理
