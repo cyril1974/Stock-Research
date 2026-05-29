@@ -1,4 +1,4 @@
-# 台股評分系統 (Windows CLI)
+# 台股評分系統 (Windows / Linux)
 
 ## 核心特色
 
@@ -9,11 +9,25 @@
 
 ## 安裝
 
+### Windows
+
 1. 安裝 Python 3.9+,安裝時勾選 "Add Python to PATH"
 2. 開 CMD 或 PowerShell:
    ```
    cd C:\path\to\stock_scorer
    pip install -r requirements.txt
+   ```
+
+### Linux / Ubuntu
+
+1. 安裝 Python 3.9+:
+   ```bash
+   sudo apt update && sudo apt install python3 python3-pip
+   ```
+2. 安裝依賴:
+   ```bash
+   cd /path/to/stock_scorer
+   pip3 install -r requirements.txt
    ```
 
 ## 檔案清單
@@ -23,6 +37,7 @@ stock_scorer.py      <- 主程式
 finmind_cache.py     <- 快取版 fetcher (必須跟主程式同資料夾)
 stocks.txt           <- 你的股票清單
 run.bat              <- Windows 一鍵執行
+run.sh               <- Linux/Ubuntu 一鍵執行
 requirements.txt
 ```
 
@@ -62,57 +77,103 @@ FinMind 免費版額度極有限:
 
 ## 快速開始
 
-### 方式 1: 雙擊 run.bat
-編輯 `run.bat` 把 `TOKEN=` 填上,雙擊執行。
+### 方式 1: 一鍵執行腳本
+
+**Windows** — 編輯 `run.bat` 把 `TOKEN=` 填上，雙擊執行。
+
+**Linux/Ubuntu** — 編輯 `run.sh` 把 `TOKEN=""` 填上，然後執行：
+```bash
+chmod +x run.sh   # 只需第一次
+./run.sh
+```
 
 ### 方式 2: 命令列
 
 **查當前 API 額度**
+
+Windows:
 ```
 python stock_scorer.py quota --token YOUR_TOKEN
 ```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py quota --token YOUR_TOKEN
+```
 
 **單次評分排序**
+
+Windows:
 ```
 python stock_scorer.py rank --stocks 2330,2317,2454 --token YOUR_TOKEN
 python stock_scorer.py rank --stocks stocks.txt --token YOUR_TOKEN
 ```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py rank --stocks 2330,2317,2454 --token YOUR_TOKEN
+python3 stock_scorer.py rank --stocks stocks.txt --token YOUR_TOKEN
+```
 
 **月度回測 (建議用 --on-quota wait 自動等)**
+
+Windows:
 ```
 python stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN ^
     --start 2024-01-01 --end 2024-12-31 --top-n 3 --on-quota wait
 ```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN \
+    --start 2024-01-01 --end 2024-12-31 --top-n 3 --on-quota wait
+```
 
 **兩種都跑**
+
+Windows:
 ```
 python stock_scorer.py both --stocks stocks.txt --token YOUR_TOKEN
+```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py both --stocks stocks.txt --token YOUR_TOKEN
 ```
 
 ### 快取管理
 
 **查看快取內容**
-```
-python stock_scorer.py cache info
-```
+
+Windows: `python stock_scorer.py cache info`
+Linux/Ubuntu: `python3 stock_scorer.py cache info`
 
 **清空快取**
-```
-python stock_scorer.py cache clear
-```
+
+Windows: `python stock_scorer.py cache clear`
+Linux/Ubuntu: `python3 stock_scorer.py cache clear`
 
 **用自訂快取檔 (分開不同投資組合)**
+
+Windows:
 ```
 python stock_scorer.py rank --stocks tech.txt --cache tech_cache.db --token YOUR_TOKEN
 python stock_scorer.py rank --stocks finance.txt --cache finance_cache.db --token YOUR_TOKEN
+```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py rank --stocks tech.txt --cache tech_cache.db --token YOUR_TOKEN
+python3 stock_scorer.py rank --stocks finance.txt --cache finance_cache.db --token YOUR_TOKEN
 ```
 
 ## 配額耗盡的實戰建議
 
 **情境 1: 第一次跑 10 檔股票的回測**
 
+Windows:
 ```
 python stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN ^
+    --start 2024-01-01 --end 2024-12-31 --on-quota wait
+```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN \
     --start 2024-01-01 --end 2024-12-31 --on-quota wait
 ```
 
@@ -122,8 +183,15 @@ python stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN ^
 **情境 2: 跑完想換個區間再跑**
 
 只要日期區間在 `finmind_cache.db` 已涵蓋範圍內,**完全不打 API**:
+
+Windows:
 ```
 python stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN ^
+    --start 2024-03-01 --end 2024-09-30 --top-n 5
+```
+Linux/Ubuntu:
+```bash
+python3 stock_scorer.py backtest --stocks stocks.txt --token YOUR_TOKEN \
     --start 2024-03-01 --end 2024-09-30 --top-n 5
 ```
 
